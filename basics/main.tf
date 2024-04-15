@@ -7,6 +7,18 @@ provider "aws" {
 data "aws_availability_zones" "available" {}
 data "aws_region" "current" {}
 
+# Terraform Data Block - Lookup Ubuntu 22.04
+data "aws_ami" "ubuntu_22_04" {
+  most_recent = true
+
+  filter {
+    name   = "name"
+    values = ["ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*"]
+  }
+
+  owners = ["099720109477"]
+}
+
 #Define the VPC 
 resource "aws_vpc" "vpc" {
   cidr_block = var.vpc_cidr
@@ -66,7 +78,7 @@ resource "aws_route_table" "private_route_table" {
   route {
     cidr_block = "0.0.0.0/0"
     # gateway_id     = aws_internet_gateway.internet_gateway.id
-    nat_gateway_id = aws_nat_gateway.nat_gateway.id
+    nat_gateway_id = aws_internet_gateway.internet_gateway.id
   }
   tags = {
     Name      = "demo_private_rtb"
@@ -97,21 +109,53 @@ resource "aws_internet_gateway" "internet_gateway" {
   }
 }
 
-#Create EIP for NAT Gateway
-resource "aws_eip" "nat_gateway_eip" {
-  domain     = "vpc"
-  depends_on = [aws_internet_gateway.internet_gateway]
+resource "aws_security_group" "my-new-security-group" {
+  name        = "web_server_inbound"
+  description = "Allow inbound traffic on 443 and 80"
+  vpc_id      = aws_vpc.vpc.id
+
+  egress {
+    description = "Allow 443 out the Internet"
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+  ingress {
+    description = "Allow 443 from the Internet"
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+  egress {
+    description = "Allow 80 out the Internet"
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+  ingress {
+    description = "Allow 80 from the Internet"
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
   tags = {
-    Name = "demo_igw_eip"
+    Name    = "web_server_inbound"
+    Purpose = "Intro to Resource Blocks Lab"
   }
 }
 
-#Create NAT Gateway
-resource "aws_nat_gateway" "nat_gateway" {
-  depends_on    = [aws_subnet.public_subnets]
-  allocation_id = aws_eip.nat_gateway_eip.id
-  subnet_id     = aws_subnet.public_subnets["public_subnet_1"].id
+resource "aws_instance" "web_server" {
+  ami                         = data.aws_ami.ubuntu_22_04.id
+  instance_type               = "t2.micro"
+  subnet_id                   = aws_subnet.public_subnets["public_subnet_1"].id
+  security_groups             = [aws_security_group.my-new-security-group.id]
+  associate_public_ip_address = true
   tags = {
-    Name = "demo_nat_gateway"
+    Name = "Web EC2 Server"
   }
 }
