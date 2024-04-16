@@ -1,6 +1,48 @@
+terraform {
+  required_version = ">= 1.0.0"
+  required_providers {
+    http = {
+      source  = "hashicorp/http"
+      version = "2.1.0"
+    }
+    random = {
+      source  = "hashicorp/random"
+      version = "3.1.0"
+    }
+    local = {
+      source  = "hashicorp/local"
+      version = "2.1.0"
+    }
+    tls = {
+      source  = "hashicorp/tls"
+      version = "3.1.0"
+    }
+  }
+}
 # Configure the AWS Provider
 provider "aws" {
   region = "sa-east-1"
+}
+
+module "subnet_addrs" {
+  source  = "hashicorp/subnets/cidr"
+  version = "1.0.0"
+
+  base_cidr_block = "10.0.0.0/22"
+  networks = [
+    {
+      name     = "module_network_a"
+      new_bits = 2
+    },
+    {
+      name     = "module_network_b"
+      new_bits = 2
+    },
+  ]
+}
+
+output "subnet_addrs" {
+  value = module.subnet_addrs.network_cidr_blocks
 }
 
 #Retrieve the list of AZs in the current AWS region
@@ -77,8 +119,7 @@ resource "aws_route_table" "private_route_table" {
 
   route {
     cidr_block = "0.0.0.0/0"
-    # gateway_id     = aws_internet_gateway.internet_gateway.id
-    nat_gateway_id = aws_internet_gateway.internet_gateway.id
+    gateway_id = aws_internet_gateway.internet_gateway.id
   }
   tags = {
     Name      = "demo_private_rtb"
@@ -158,4 +199,12 @@ resource "aws_instance" "web_server" {
   tags = {
     Name = "Web EC2 Server"
   }
+}
+resource "tls_private_key" "generated" {
+  algorithm = "RSA"
+}
+
+resource "local_file" "private_key_pem" {
+  content  = tls_private_key.generated.private_key_pem
+  filename = "MyAWSKey.pem"
 }
